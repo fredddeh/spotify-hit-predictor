@@ -17,19 +17,18 @@ This group data science project explores what makes a song a "hit" by analyzing 
 
 ```
 spotify-hit-predictor/
-├── archive/ # External raw datasets (e.g. full Billboard/Spotify collections)
-├── data/ # Merged and cleaned data for analysis
+├── data/
 │ ├── billboard_raw/
 │ ├── spotify_raw/
-│ ├── spotify_billboard/
-│ └── spotify_billboard_merged.csv
-├── notebooks/ # Notebook outputs and summary visuals
-├── results/ # Model outputs and evaluation metrics
-├── rwd-billboard-data/ # Cloned source repo (not tracked in .git)
+│ ├── spotify_billboard/ # Combined
+│ └── spotify_billboard_merged.csv # Merged and cleaned data for analysis
 ├── scripts/ # Main project scripts and modelling
 │ ├── Spotify_EDA.Rmd
 │ ├── Spotify_XGBoost.ipynb
-│ └── dataset/ + enrich, merge, and explore scripts
+│ └── dataset/ # Code to enrich, merge, and explore scripts
+│   ├── enrich_spotify_with_billboard.py
+│   ├── explore_hot100_data.py
+│   └── merge.py
 ├── .gitignore
 ├── requirements.txt
 └── README.md
