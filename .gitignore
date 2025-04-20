@@ -3,6 +3,7 @@ venv/
 
 # Data files
 data/*.csv
+!data/spotify_billboard_merged.csv
 data/*.json
 
 # Ignore cloned subrepo
