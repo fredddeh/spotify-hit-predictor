@@ -16,7 +16,23 @@ This group data science project explores what makes a song a "hit" by analyzing 
 ## Project Structure
 
 ```
-spotify-hit-predictor/ ├── archive/ # External raw datasets (e.g. full Billboard/Spotify collections) ├── data/ # Merged and cleaned data for analysis │ ├── billboard_raw/ │ ├── spotify_raw/ │ ├── spotify_billboard/ │ └── spotify_billboard_merged.csv ├── notebooks/ # Notebook outputs and summary visuals ├── results/ # Model outputs and evaluation metrics ├── rwd-billboard-data/ # Cloned source repo (not tracked in .git) ├── scripts/ # Main project scripts and modelling │ ├── Spotify_EDA.Rmd │ ├── Spotify_XGBoost.ipynb │ └── dataset/ + enrich, merge, and explore scripts ├── .gitignore ├── requirements.txt └── README.md
+spotify-hit-predictor/
+├── archive/ # External raw datasets (e.g. full Billboard/Spotify collections)
+├── data/ # Merged and cleaned data for analysis
+│ ├── billboard_raw/
+│ ├── spotify_raw/
+│ ├── spotify_billboard/
+│ └── spotify_billboard_merged.csv
+├── notebooks/ # Notebook outputs and summary visuals
+├── results/ # Model outputs and evaluation metrics
+├── rwd-billboard-data/ # Cloned source repo (not tracked in .git)
+├── scripts/ # Main project scripts and modelling
+│ ├── Spotify_EDA.Rmd
+│ ├── Spotify_XGBoost.ipynb
+│ └── dataset/ + enrich, merge, and explore scripts
+├── .gitignore
+├── requirements.txt
+└── README.md
 ```
 
 ---
@@ -39,8 +55,8 @@ spotify-hit-predictor/ ├── archive/ # External raw datasets (e.g. full Bil
 
 | Model                | Language | File                                  |
 |---------------------|----------|---------------------------------------|
-| Logistic Regression | R        | `scripts/dataset/logistic_regression.R` *(external)* |
-| Random Forest       | R        | `scripts/dataset/random_forest.R`     |
+| Logistic Regression | R        | `scripts/logistic_regression.R`       |
+| Random Forest       | R        | `scripts/random_forest.R`             |
 | XGBoost             | Python   | `scripts/Spotify_XGBoost.ipynb`       |
 | SVM                 | Python   | `scripts/dataset/svm_model.ipynb`     |
 
