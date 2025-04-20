@@ -12,3 +12,6 @@ rwd-billboard-data/
 .env
 __pycache__/
 .vscode/
+.DS_Store
+.cache/
+

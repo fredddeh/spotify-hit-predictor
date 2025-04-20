@@ -1,0 +1,1669 @@
+---
+title: 'Spotify Hit Predictor'
+author: "Frederika Cook, Zhen Chen, Duru Demirbag, Hannah Mcauley"
+date: "2025-04-12"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    fig_caption: true
+runtime: shiny # Enables shiny interactivity
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r set_working_directory, include=FALSE}
+# Set working directory
+setwd("/Users/frederika/Desktop/MSc Data Science/Machine Learning w R/Assessment 2")
+```
+
+---
+
+# **Introduction**
+
+This exploratory data analysis investigates the Spotify Hit Predictor dataset, which combines audio features from Spotify with Billboard Hot 100 chart data. The goal is to understand patterns and relationships that may distinguish hit songs (those that charted) from non-hits, based on their musical characteristics. This analysis will guide feature selection and modeling strategies for predicting a song’s chart success.
+
+---
+
+# **Exploratory Data Analysis (EDA)**  
+
+Before building predictive models, we perform Exploratory Data Analysis (EDA) to uncover trends, detect anomalies, and understand patterns that may influence feature engineering and model performance.
+
+We begin by loading the data and inspecting it for missing values, duplicates, and variable types.
+
+<br><br>
+
+
+## **Setting Up the Analysis Environment**
+
+Load the required packages.
+
+```{r load-packages, message=FALSE, warning=FALSE}
+# Load required packages
+library(tidyverse)   # Includes dplyr, ggplot2, tidyr, etc.
+library(plotly)      # For interactive visualizations
+library(caret)       # For machine learning
+library(knitr)       # For dynamic report generation
+library(kableExtra)  # For enhanced table formatting
+library(Hmisc)       # For advanced statistical analysis
+library(reshape2)    # For reshaping data
+library(igraph)      # For network analysis
+library(visNetwork)  # For interactive network visualizations
+library(htmlwidgets) # For embedding HTML widgets
+library(moments)     # For skewness and kurtosis
+library(gridExtra)  # For arranging multiple plots
+library(car)         # For regression diagnostics
+library(shiny)       # For interactive web apps
+library(glmnet)      # For ridge, lasso, and elastic net
+library(patchwork)
+library(stringr)
+library(qqplotr)  # For QQ plots in ggplot2
+library(corrplot)
+library(ggcorrplot)
+library(scales)
+library(e1071)   # for skewness & kurtosis
+
+```
+
+
+
+## **Loading and Inspecting the Dataset**
+
+Write something here
+
+```{r set-file-path}
+
+dataset_path <- "data/spotify_billboard_merged.csv" 
+```
+
+Now the dataset's loaded, let's take a quick look:
+
+```{r load-data, message=FALSE, warning=FALSE}
+# Let us call the original, "raw" dataset that you shared with us: spotify_raw
+spotify_raw <- read.csv(dataset_path)
+
+# View the first few rows as a scrollable interactive table
+DT::datatable(head(spotify_raw), options = list(scrollY = "300px", paging = FALSE))
+
+```
+
+
+**With our dataset successfully loaded, we're ready to explore its structure and assess its quality!**
+
+
+<br><br>
+
+
+
+# **Ensuring Data Quality: Cleaning Before Analysis**
+
+## **Checking for Mismatched Data Types**
+
+Understanding the structure and data types in our dataset is essential for appropriate preprocessing and modeling.
+
+```{r dataset_structure, message=FALSE, warning=FALSE}
+# Inspect structure: observations, variables, and types
+str(spotify_raw)
+
+```
+
+**1. Dataset Overview**
+
+- **Observations**: 40,560  
+- **Variables**: 26  
+- **Data Types**: A mix of `numeric`, `integer`, and `character`
+
+**2. Target and Identifier Variables**
+
+- **Target variables**:  
+  - `target`, `on_billboard` — both are binary integers  
+- **Identifiers**:  
+  - `track`, `artist` (*character*)  
+  - Normalized variants: `track_norm`, `artist_norm` (*character*) 
+
+**3. Feature Types**
+
+- **Binary predictor**:  
+  - `mode`  
+- **Continuous numeric predictors**:  
+  - `danceability`, `energy`, `loudness`, `speechiness`, `acousticness`  
+  - `instrumentalness`, `liveness`, `valence`, `tempo`, `chorus_hit`  
+- **Integer predictors**:  
+  - `key`, `time_signature`, `duration_ms`, `sections`  
+  - `weeks_on_chart`, `peak_position`
+
+<br><br>
+**Checking Summary Statistics:**
+
+To identify outliers, skewed distributions, and modeling needs, we begin by inspecting the dataset's summary statistics:
+
+```{r summary-statistics, message=FALSE, warning=FALSE}
+
+# This will help us to detect missing values, outliers, and unusual distributions
+summary(spotify_raw)
+
+```
+
+**Early Observations:**
+
+**1. General Notes**
+
+- No missing values detected.
+- Some variables are **heavily skewed** (e.g., `speechiness`, `instrumentalness`, `duration_ms`) or have **extreme outliers**.
+- A few features (e.g., `key`, `time_signature`) are numeric but **categorical in nature** — best treated as factors.
+
+**2. Continuous Variables**
+
+- `danceability`: Range 0–0.99, near-symmetric, minor left skew. Well-behaved.
+- `energy`: Broad range, slight left skew. Good numeric predictor.
+- `loudness`: Left skewed with extreme low values. Consider Z-score normalization.
+- `speechiness`: Highly right-skewed. May need log transformation or clipping.
+- `acousticness`: Right-skewed, with values across the scale.
+- `instrumentalness`: Very right-skewed; majority near 0, few pure instrumentals.
+- `liveness`: Right-skewed. Consider binning: >0.8 = live, <0.5 = studio.
+- `valence`: Symmetric. 0 = sad, 1 = happy. Possibly mood-related.
+- `tempo`: Slight right skew. Potentially genre-influential (e.g. EDM, rap).
+- `duration_ms`: Extreme right skew. Consider transformation or capping.
+- `chorus_hit`: Right-skewed; some tracks delay chorus significantly.
+- `sections`: Right-skewed; most tracks are conventional, a few are complex.
+
+**3. Discrete or Categorical (Possibly Numeric)**
+
+- `key`: Values 0–11 (pitch class). Treat as **categorical** or apply **cyclic encoding**.
+- `mode`: Binary (0 = minor, 1 = major). Use as-is or as a factor.
+- `time_signature`: Few distinct values (0–5). Best treated as a factor.
+
+**4. Target Variables**
+
+- `target` and `on_billboard`: Binary outcomes (~49:51 split). Well-balanced.
+- `weeks_on_chart`: Right-skewed. May benefit from binning (short/med/long).
+- `peak_position`: Skewed toward lower values (better ranks).
+
+**5. Modeling Considerations**
+
+- Standardization recommended for:
+`loudness`, `tempo`, `duration_ms`, `chorus_hit`, `sections`
+- Features with probabilistic characteristics:
+`danceability`, `energy`, `acousticness`, `valence`, `liveness`, `speechiness`, `instrumentalness`
+- Consider treating `key` and `time_signature` as factors or encoding them cyclically.
+- Watch for outliers and skew in:
+`speechiness`, `instrumentalness`, `duration_ms`, `liveness`, `chorus_hit`
+
+<br><br>
+
+
+## **Investigating Duplicate Data**
+
+```{r check-duplicates, message=FALSE, warning=FALSE}
+# Check for duplicate rows
+duplicates <- sum(duplicated(spotify_raw))
+
+# Display result
+if (duplicates > 0) {
+  print(paste("Warning: There are", duplicates, "duplicate rows in the dataset!"))
+} else {
+  print("No duplicate rows found. Data is clean.")
+}
+```
+
+**Result:** No duplicate records detected — good data hygiene so far!
+
+<br><br>
+
+
+## **Investigating Outliers: Detecting Extreme Values in the Data**
+
+<br><br>
+
+### **Assessing Near-Zero Variance Columns: Are Any Features Redundant?**
+
+We identify near-zero variance features that may contribute little to modeling and can be removed for efficiency.
+
+```{r check-near-zero-variance, message=FALSE, warning=FALSE}
+# The following utilises functionality from the following packages: caret
+
+# Identify near-zero variance predictors in the filtered dataset
+nzv <- nearZeroVar(spotify_raw, saveMetrics = TRUE)
+
+# Extract names of NZV columns
+nzv_vars <- rownames(nzv[nzv$nzv, ])
+
+if (length(nzv_vars) > 0) {
+  print(paste("Warning: The following columns have near-zero variance and may be uninformative:", 
+              paste(nzv_vars, collapse=", ")))
+} else {
+  print("No near-zero variance columns detected. All features contain meaningful variation.")
+}
+```
+
+**Findings:** NZV features were found: `peak_position`, `first_charted`, `last_charted`.
+
+**Update:** These 3 features were found to cause data leakage, so they were ultimately removed.
+
+
+<br><br>
+
+
+### **Detecting Outliers Using Z-Scores**
+
+To ensure comparability across features with different scales (e.g., `duration_ms` > 4 million vs. `tempo` ~240), we standardize all numeric variables.
+
+Z-scores allow us to identify extreme values by expressing each observation in terms of its deviation from the feature's mean.
+
+```{r compute-outliers-zscore, message=FALSE, warning=FALSE}
+# The following utilises functionality from the following packages: dplyr, knitr & kableExtra
+
+# Define variables to exclude from Z-scoring
+zscore_exclude <- c("target", "on_billboard",     # binary target variables
+                    "mode",                       # binary
+                    "valence", "energy", "danceability", 
+                    "acousticness", "instrumentalness", 
+                    "liveness", "speechiness",    # already naturally "normalised" / probability
+                    "key", "time_signature"       # categorical
+                    )
+
+# Standardize variables (excluding those above)
+numeric_zscore <- spotify_raw %>%
+  select(where(is.numeric)) %>%
+  select(-all_of(zscore_exclude)) %>%
+  mutate(across(everything(), ~ scale(.) %>% as.vector()))
+
+# Combine with original scale variables
+numeric_not_scaled <- spotify_raw %>%
+  select(all_of(c("valence", "energy", "danceability", 
+                  "acousticness", "instrumentalness", 
+                  "liveness", "speechiness")))
+
+# Combine both sets
+spotify_scaled_combined <- bind_cols(numeric_zscore, numeric_not_scaled)
+
+# Create outlier flags *only for Z-scored features*
+outlier_flags <- numeric_zscore %>%
+  mutate(across(everything(), ~ ifelse(abs(.) > 3, 1, 0)))
+
+# Rename columns to indicate they are outlier flags
+colnames(outlier_flags) <- paste0(colnames(outlier_flags), "_outlier")
+
+# Add identifier columns for merging/viewing
+outlier_flags <- cbind(
+  spotify_raw %>% select(track, artist, uri, track_norm, artist_norm),
+  outlier_flags
+)
+```
+
+### **Visualizing Outliers with Scaled Boxplots**  
+
+```{r scaled-boxplots, message=FALSE, warning=FALSE}
+# The following utilises functionality from the following packages: ggplot2, dplyr & tidyr
+
+# Identify variable types
+zscore_vars <- colnames(numeric_zscore)
+zero_one_vars <- colnames(numeric_not_scaled)
+
+# Add variable type and factor levels for ordering
+spotify_long_combined <- spotify_scaled_combined %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Value") %>%
+  mutate(
+    Type = case_when(
+      Variable %in% zscore_vars ~ "Z-score",
+      Variable %in% zero_one_vars ~ "0–1 Scale",
+      TRUE ~ "Other"
+    ),
+    Variable = factor(Variable, levels = c(zscore_vars, zero_one_vars))  # ordered for plotting
+  )
+
+# Create boxplot
+ggplot(spotify_long_combined, aes(x = Variable, y = Value)) +
+  geom_boxplot(outlier.color = "red", outlier.size = 2, fill = NA) +
+  theme_minimal() +
+  coord_flip() +
+  facet_wrap(~ Type, scales = "free_y", ncol = 1) +
+  labs(title = "Boxplots of Numeric Variables (Faceted by Type)",
+       x = "Variable", y = "Value") +
+  theme(axis.text.y = element_text(size = 10))
+
+```
+
+```{r speechiness, message=FALSE, warning=FALSE}
+# Filter for tracks with high speechiness (> 0.66)
+high_speechiness_tracks <- spotify_raw %>%
+  filter(speechiness > 0.66) %>%
+  arrange(desc(speechiness)) %>%
+  select(track, artist)
+
+
+# View the result
+knitr::kable(head(high_speechiness_tracks, 20), caption = "Tracks with High Speechiness")
+
+```
+
+
+**Outlier Analysis Summary**
+
+**1. General Patterns**
+
+- The plot combines Z-scored variables (e.g., `duration_ms`, `tempo`) with probability-based features on a 0–1 scale (e.g., `valence`, `energy`, `acousticness`).
+- Several variables display extreme right-skewed outliers (Z > 3), while others are tightly bounded with minimal deviation.
+
+**2. High Outlier Activity**
+
+- `sections`: Extremely long-tailed; outliers reaching Z ≈ 30. Suggests complex or unconventional track structures.
+- `chorus_hit`: Strong right-skew; many tracks delay the chorus significantly — likely long intros or non-traditional formats.
+- `duration_ms`: Substantial spread with extreme values; some tracks exceed an hour, indicating remixes or extended versions. Consider capping or transformation.
+- `weeks_on_chart`: Long right tail; a few tracks show exceptional chart longevity, hinting at "superstar" popularity.
+
+**3. Moderate Outlier Activity**
+
+- Variables: `tempo`, `peak_position`, `loudness`, `liveness`, `danceability`
+- These show some skew and outliers but remain within reasonable bounds.
+
+**4. Domain-Based Probabilistic Features (0–1 Scale)**
+
+Outliers here reflect meaningful thresholds, not statistical anomalies:
+
+
+| Variable         | Threshold | Interpretation                            |
+|------------------|-----------|--------------------------------------------|
+| `speechiness`    | > 0.66    | Spoken word, poetry, comedy, or speech-heavy rap    |
+| `instrumentalness` | > 0.5  | Instrumental tracks (little to no vocals)           |
+| `liveness`       | > 0.8     | Live performance recordings                      |
+
+
+- These values indicate track type or style, not outlier errors.
+- Other features like `acousticness`, `valence`, `energy` show **broad, natural distributions** with no dominant outliers.
+
+**5. Processing Recommendations**
+
+- Apply capping or log transformation for skewed variables with extreme values:
+`sections`, `chorus_hit`, `duration_ms`
+- Consider to use domain-informed binning for 0–1 variables (e.g., “high speechiness”).
+- Flag potential outliers for manual review or targeted filtering during model training.
+
+<br><br>
+
+
+### **Counting Observations with Multiple Outliers**
+
+Some records may have more than one extreme value, which could signal data entry errors or real-world disparities.
+
+```{r total-outlier-observations, message=FALSE, warning=FALSE}
+# Count number of outlier variables per row
+outlier_flags$Total_Outlier_Features <- rowSums(outlier_flags[, -c(1:5)], na.rm = TRUE)
+
+# Count number of rows that have at least one outlier
+total_outlier_rows <- sum(outlier_flags$Total_Outlier_Features > 0)
+
+# Display
+total_outlier_rows
+```
+
+**Findings:** <br>
+- 2,498 rows contain at least one outlier. <br>
+- Some records have multiple extreme values (total number of outlier values = 2981), requiring further investigation. <br>
+
+<br><br>
+
+
+### **Analyzing Outlier Clustering by `on_billboard`**
+
+To explore whether hits follow more conventional patterns, we examine how outlier frequency differs between Billboarded and non-Billboarded tracks.
+
+```{r outlier-clustering-on_billboard, message=FALSE, warning=FALSE}
+# The following utilises functionality from the following packages: dplyr, knitr, kableExtra
+
+# Join the target variable back into outlier_flags
+outlier_flags_with_label <- outlier_flags %>%
+  mutate(on_billboard = spotify_raw$on_billboard)
+
+# Summarise outlier stats by class
+outlier_by_class <- outlier_flags_with_label %>%
+  group_by(on_billboard) %>%
+  summarise(
+    total_tracks = n(),
+    tracks_with_outliers = sum(Total_Outlier_Features > 0),
+    percent_outliers = paste0(round(100 * sum(Total_Outlier_Features > 0) / n(), 1), "%"),
+    max_outliers_in_a_track = max(Total_Outlier_Features)
+  ) %>%
+  mutate(on_billboard = ifelse(on_billboard == 1, "Billboarded", "Not Billboarded"))
+
+# Create pretty HTML table
+outlier_by_class %>%
+  kable("html", caption = "Summary of Outlier Distribution by Billboard Status") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover"))
+
+```
+
+**Interpretation**:
+
+Tracks that did not chart on Billboard were more likely to contain outliers:
+
+- **7.7%** of non-Billboarded tracks had at least one outlier, compared to **4.6%** of Billboarded tracks.
+- The most extreme case among non-Billboarded tracks had **4 outlier features**, while the maximum among Billboarded tracks was just **2**.
+
+These findings suggest that charting hits tend to align more closely with the dataset’s typical feature ranges, while non-hits are more likely to deviate from the norm.
+
+<br><br>
+
+
+### Proportion of Tracks with Outliers by Billboard Status
+
+```{r bar-outliers, message=FALSE, warning=FALSE}
+# The following utilises functionality from the following packages: dplyr
+
+# Plot it
+ggplot(outlier_flags_with_label, aes(x = as.factor(on_billboard), fill = Total_Outlier_Features > 0)) +
+  geom_bar(position = "fill") +
+  scale_fill_manual(values = c("FALSE" = "grey80", "TRUE" = "firebrick"),
+                    labels = c("No Outliers", "Has Outliers")) +
+  labs(title = "Proportion of Tracks with Outliers by Billboard Status",
+       x = "On Billboard", y = "Proportion", fill = "Outlier Presence") +
+  theme_minimal()
+
+```
+
+**Interpretation**: <br>
+The stacked bar plot highlights that **a greater proportion of non-Billboard tracks** contain at least one outlier feature. While the overall proportion of outlier-containing tracks is relatively low in both groups, the difference supports the hypothesis that outlier-heavy tracks are **less likely to succeed commercially**.
+
+<br><br>
+
+
+### Which Variables Tend to Be Outliers More Often by `on_billboard`?
+
+This plot compares how often each variable appears as an outlier in non-Billboarded tracks versus Billboarded tracks.
+
+```{r bar-outliers-features, message=FALSE, warning=FALSE}
+# The following utilises functionality from the following packages: ggplot2
+
+# Keep only the outlier flags and label
+outlier_by_var <- outlier_flags_with_label %>%
+  select(starts_with("loudness_outlier"), ends_with("_outlier"), on_billboard) %>%
+  pivot_longer(cols = -on_billboard, names_to = "Variable", values_to = "IsOutlier") %>%
+  group_by(on_billboard, Variable) %>%
+  summarise(OutlierCount = sum(IsOutlier, na.rm = TRUE), .groups = "drop")
+
+# Pivot wider to compare
+outlier_compare <- outlier_by_var %>%
+  pivot_wider(names_from = on_billboard,
+              values_from = OutlierCount,
+              names_prefix = "Class_")
+
+# Add difference and relative ratio
+outlier_compare <- outlier_compare %>%
+  mutate(Diff = Class_0 - Class_1,
+         Ratio = round(Class_0 / (Class_1 + 1), 2)) # +1 to avoid division by 0
+
+# Plot
+ggplot(outlier_compare, aes(x = reorder(Variable, Diff), y = Diff)) +
+  geom_col(fill = "#4E79A7") +
+  coord_flip() +
+  labs(title = "Difference in Outlier Count (Non-Hits – Hits)",
+       x = "Variable", y = "Outlier Count Difference") +
+  theme_minimal()
+
+```
+
+**Interpretation**
+
+- Tracks that did not chart tend to have more outliers — especially in:
+`loudness`, `duration_ms`, and `sections`, where non-hits show significantly more extreme values.
+- `chorus_hit`, also shows a notable skew, possibly reflecting non-traditional song structures or delayed choruses.
+- In contrast:
+  - Billboard hits have almost no outliers in `peak_position`, which is expected as this is a direct outcome of charting.
+- The negative value for `weeks_on_chart` indicates it's a common outlier for hits, which makes sense given its relevance to popularity.
+
+**Key Takeaways**
+
+- Outliers are more prevalent among non-hits, both in count and diversity of features.
+- Billboard hits tend to cluster near average feature values, suggesting that conventional structure and production may support commercial success.
+- Non-hits are more likely to exhibit unusual durations, section counts, or loudness extremes — potentially signaling niche or experimental content.
+
+**Modeling Implications**
+
+- Apply **log transformations, capping, or robust scaling** to features like `duration_ms`, `chorus_hit`, and `sections`.
+- Engineer an outlier count feature (`n_outliers`) or flag (`has_outlier`) to capture track-level extremity.
+- Tree-based models (e.g., Random Forest, XGBoost) are generally robust, but **linear models may require preprocessing**.
+- Outliers skewed toward non-hits could **bias predictions** if not addressed, particularly in imbalanced datasets (but this is not a concern for our dataset).
+- Penalizing large deviations may improve hit prediction accuracy, especially in regularized models.
+
+<br><br>
+
+
+# **Assessing Predictive Power of Features**
+
+To evaluate how well individual features distinguish between Billboarded and non-Billboarded tracks, we examine violin plots showing their distribution by class.
+
+## **Violin Plots**
+
+```{r violin-plots, message=FALSE, warning=FALSE}
+# The following utilises functionality from the following packages: ggplot
+
+# Add 'on_billboard' back into the dataset
+spotify_with_label <- bind_cols(spotify_scaled_combined, on_billboard = spotify_raw$on_billboard)
+
+# Convert to long format for plotting
+spotify_long_violin <- spotify_with_label %>%
+  pivot_longer(
+    cols = -on_billboard,
+    names_to = "Variable",
+    values_to = "Value"
+  )
+
+# Plot violin plots by classification label
+ggplot(spotify_long_violin, aes(x = as.factor(on_billboard), y = Value, fill = as.factor(on_billboard))) +
+  geom_violin(alpha = 0.6, trim = FALSE) +
+  facet_wrap(~ Variable, scales = "free_y") +
+  scale_fill_manual(values = c("0" = "#F28E2B", "1" = "#4E79A7"), labels = c("Not Billboarded", "Billboarded")) +
+  labs(title = "Violin Plots of Numeric Features by Billboard Classification",
+       x = "On Billboard", y = "Value", fill = "Track Status") +
+  theme_minimal() +
+  theme(
+    strip.text = element_text(size = 10),
+    axis.text.x = element_text(size = 9),
+    legend.position = "top"
+  )
+
+```
+
+**Key Observations**
+
+**1. Strongly Discriminative Features:**
+
+- `weeks_on_chart` shows near-complete separation between classes — unsurprisingly predictive, but likely leakage if used in a true prediction setting.
+- `danceability` and `energy` are higher on average for Billboard hits, indicating their potential value in distinguishing popular tracks.
+- `chorus_hit`, `sections`, and `duration_ms` are more variable and right-skewed among non-hits, suggesting structural complexity or unconventional formats may correlate with lower commercial performance.
+
+**2. Limited Predictive Utility:**
+
+- `instrumentalness` and `speechiness` are heavily skewed toward zero across both groups — these may contribute less predictive value alone.
+- `liveness` and `acousticness` show subtle differences but might be more useful in combination with other features.
+
+**3. Insights for Feature Selection:**
+
+- Several features exhibit clear distributional shifts between classes, reinforcing their potential as inputs to a classifier.
+- Others may serve better as interaction terms, binned variables, or be excluded if too uniform.
+- These visual insights complement earlier outlier and correlation analyses and help guide feature engineering decisions.
+
+<br><br>
+
+## **Density Difference Plots**
+
+We visualize the distribution of each numeric feature, comparing Billboarded vs non-Billboarded tracks. These plots reveal how feature values differ across classes — highlighting potential predictors and confirming earlier observations.
+
+```{r plot-density-difference, message=FALSE, warning=FALSE}
+# The following utilises functionality from the following packages: ggplot2, dplyr, tidyr
+
+# Prepare long format with label
+spotify_density_df <- spotify_scaled_combined %>%
+  bind_cols(on_billboard = spotify_raw$on_billboard) %>%
+  pivot_longer(cols = -on_billboard, names_to = "Variable", values_to = "Value")
+
+# Plot density curves
+ggplot(spotify_density_df, aes(x = Value, fill = as.factor(on_billboard))) +
+  geom_density(alpha = 0.4) +
+  facet_wrap(~ Variable, scales = "free", ncol = 3) +
+  scale_fill_manual(values = c("0" = "#F28E2B", "1" = "#4E79A7"),
+                    labels = c("Not Billboarded", "Billboarded")) +
+  labs(title = "Density Plots by Billboard Status",
+       x = "Value", y = "Density", fill = "Track Status") +
+  theme_minimal()
+
+```
+
+**Interpretation**
+
+The density plots reinforce earlier patterns and highlight key distributional differences:
+
+**Higher in Billboarded Tracks**
+
+- `danceability`, `energy`, `valence`, `loudness`
+- → Billboard tracks tend to shift right — suggesting more energetic, emotionally positive, and polished production.
+
+**Chart-Specific Metrics**
+
+- `weeks_on_chart`, `peak_position`
+- → Sharp peaks for Billboarded tracks confirm their direct relationship with chart success. These are strong indicators, but may act as leakage if not used carefully.
+
+**Lower in Billboarded Tracks**
+
+- `instrumentalness`, `acousticness`, `speechiness`
+- → Hits are generally less acoustic, less spoken, and rarely instrumental — favoring conventional lyrical structure.
+
+**Right-Skewed in Non-Hits**
+- `chorus_hit`, `sections`
+- → Longer tails suggest non-Billboard tracks may include more experimental or non-traditional formats (e.g., late choruses, complex structures).
+
+**No Meaningful Difference**
+
+- `tempo`
+- → Distributions are nearly identical — aligns with earlier statistical tests showing minimal impact on hit likelihood.
+
+**Takeaway**
+
+These density plots help confirm which features meaningfully differ between hits and non-hits — and which may have low predictive power on their own. They offer visual validation for earlier findings from summary stats, outlier analysis, and violin plots.
+
+<br><br>
+
+## **Statistical Tests (t-tests) + Bar Plot of p-values**
+
+We conduct independent t-tests to assess whether the mean values of each numeric feature differ significantly between Billboarded and non-Billboarded tracks.
+
+Each test compares:
+
+- **Group 0**: Not Billboarded
+- **Group 1**: Billboarded
+
+The resulting p-values test the null hypothesis that there is no difference in means between the two groups.
+
+```{r plot-statistical-sig, message=FALSE, warning=FALSE}
+# The following utilises functionality from the following packages: ggplot2, dplyr, tidyr
+
+# Apply t-test to each variable
+pvals <- spotify_scaled_combined %>%
+  bind_cols(on_billboard = spotify_raw$on_billboard) %>%
+  pivot_longer(cols = -on_billboard, names_to = "Variable", values_to = "Value") %>%
+  group_by(Variable) %>%
+  summarise(
+    p_value = tryCatch(
+      t.test(Value ~ on_billboard)$p.value,
+      error = function(e) NA
+    )
+  ) %>%
+  arrange(p_value) %>%
+  mutate(significant = p_value < 0.05)
+
+# Plot bar chart of -log10(p-values)
+ggplot(pvals, aes(x = reorder(Variable, -p_value), y = -log10(p_value), fill = significant)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  scale_fill_manual(values = c("TRUE" = "#4E79A7", "FALSE" = "grey70")) +
+  labs(title = "Statistical Significance of Variables by Billboard Status",
+       x = "Variable", y = expression(-log[10](p-value)), fill = "Significant (p < 0.05)") +
+  theme_minimal()
+
+
+```
+
+**Interpretation**
+
+The bar plot visualizes significance using −log₁₀(p-value), where higher bars = stronger statistical evidence of a difference:
+
+**1. Highly Significant Features (Very Low p-values):**
+
+- `weeks_on_chart`, `valence`, `peak_position`, `loudness`, `danceability`
+- → Strong mean differences between hits and non-hits — excellent candidates for prediction.
+
+**2. Also Significant:**
+
+- `instrumentalness`, `acousticness`, `energy`
+- → While these show strong p-values, their predictive value may be subtle or non-linear.
+
+**3. Less Significant:**
+
+- `tempo`, `speechiness`, `chorus_hit`
+- → These variables show minimal differences in mean — despite having visual spread, they may not be reliable standalone predictors.
+
+**Key Takeaway**
+
+- Statistical significance ≠ strong correlation.
+- For example, instrumentalness is highly significant but weakly correlated — possibly due to non-linear or threshold effects.
+
+These tests complement our EDA and visualizations, helping identify features worth transforming, engineering, or tracking for model inclusion.
+
+<br><br>
+
+## **Correlation with Target (on_billboard)**
+
+We compute the Pearson correlation between each numeric variable and the binary target (`on_billboard`). This helps identify linear relationships between individual features and chart success.
+
+```{r plot-correlation-bar, message=FALSE, warning=FALSE}
+
+# Calculate correlations
+cor_df <- spotify_scaled_combined %>%
+  summarise(across(everything(), ~ cor(., spotify_raw$on_billboard))) %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Correlation") %>%
+  arrange(desc(abs(Correlation))) %>%
+  mutate(FillColor = ifelse(Correlation < 0, "firebrick", "#4E79A7"))
+
+# Plot with conditional colors
+ggplot(cor_df, aes(x = reorder(Variable, Correlation), y = Correlation, fill = FillColor)) +
+  geom_col() +
+  scale_fill_identity() +
+  coord_flip() +
+  labs(title = "Correlation with Billboard Status",
+       x = "Variable", y = "Pearson Correlation") +
+  theme_minimal()
+
+```
+
+**Interpretation**
+
+**Positively Correlated with Billboard Hits:**
+
+- `weeks_on_chart` and `peak_position` show the strongest positive correlations — unsurprising, as both directly reflect chart performance.
+- `danceability`, `loudness`, `valence`, and `energy` are moderately correlated:
+  - Billboard hits tend to be more danceable
+  - Slightly louder
+  - More emotionally positive
+  - And higher in energy
+
+**Negatively Correlated:**
+
+- `instrumentalness` and `acousticness` show the strongest negative correlations:
+  - Billboard tracks are typically less acoustic and less instrumental
+  - This aligns with mainstream preferences for vocal-driven, electronically produced music
+
+**Key Takeaway**
+
+Correlation complements statistical testing and visual EDA by highlighting features with linear relationships to the target.
+
+However, keep in mind:
+
+- High correlation doesn’t guarantee predictive power (e.g., leakage from `weeks_on_chart`)
+- Low correlation doesn’t mean unimportant — features like `instrumentalness` may have non-linear effects
+
+Together with significance testing and visual distributions, this step helps prioritize features for modeling and guides thoughtful feature engineering.
+
+<br><br>
+
+## **Summary Across All 3 Plots**
+
+This table combines insights from the **correlation plot**, **t-tests**, and **violin plots/density difference plots** to assess which features are most useful in distinguishing Billboard hits from non-hits.
+
+| Feature           | High Correlation | Statistically Significant | Visually Distinct | Notes                                         |
+|------------------|------------------|----------------------------|--------------------|-----------------------------------------------|
+| `weeks_on_chart` | ✅               | ✅                         | ✅                 | Top predictor (but may be post hoc!)          |
+| `peak_position`  | ✅               | ✅                         | ✅                 | Strong chart signal                           |
+| `danceability`   | ✅               | ✅                         | ✅                 | Useful pre-release predictor                  |
+| `loudness`       | ✅               | ✅                         | ✅                 | Consistent separation pattern                 |
+| `valence`        | ✅               | ✅                         | ✅                 | Positivity appears to matter                  |
+| `instrumentalness` | ❌             | ✅                         | ✅                 | Billboard avoids instrumental tracks          |
+| `acousticness`   | ❌               | ✅                         | ✅                 | Acoustic songs are less likely to chart       |
+| `tempo`          | ❌               | ❌                         | ❌                 | Little to no class separation                 |
+| `speechiness`    | ❌               | ❌                         | ⚠️ Slight          | Spoken-word tracks rarely chart               |
+
+✅ = Strong indicator  
+⚠️ Slight = Some visual difference, but not clearly predictive  
+❌ = No notable separation across methods
+
+<br><br>
+
+# **Examining Feature Correlations**  
+
+Understanding how numeric features relate to each other is essential for identifying multicollinearity — when predictors are strongly correlated with one another. This can reduce model interpretability and inflate variance in linear models.
+
+## **Correlation Heatmap: Continuous Predictors**
+
+The plot below visualizes pairwise Pearson correlations between all continuous predictor variables (excluding categorical fields and target columns). Only the lower triangle is shown, with color intensity and labels indicating the strength and direction of the relationships.
+
+```{r correlation_heatmap, message=FALSE, warning=FALSE}
+# The following utilises functionality from the following packages: dplyr & corrplot
+
+# Select numeric columns excluding 'on_billboard' and 'target'
+data_numeric <- spotify_raw %>%
+  select_if(is.numeric) %>%
+  select(-on_billboard, -target, -mode, -key, -time_signature)
+
+# Calculate correlation matrix
+cor_matrix <- cor(data_numeric, use = "complete.obs")
+
+# Assign column and row names (error-checking preserved)
+new_colnames <- colnames(data_numeric)
+num_cols <- ncol(data_numeric)
+
+if (length(new_colnames) == num_cols) {
+  colnames(cor_matrix) <- new_colnames
+  rownames(cor_matrix) <- new_colnames
+} else {
+  stop("❌ Error: Column name count does not match number of numeric variables.")
+}
+
+# Create correlation plot with hierarchical clustering
+ggcorrplot(
+  cor_matrix,
+  hc.order = TRUE,        # Enable hierarchical clustering
+  lab = TRUE,
+  type = "lower",
+  colors = c("red", "white", "blue"),
+  lab_size = 3,
+  tl.cex = 10
+) +
+  labs(title = "Correlation Matrix between Continuous Predictor Variables")
+
+
+```
+
+
+**Key Observations:**
+
+- Strong positive correlation between `duration_ms` and `sections` (r = 0.89) — longer tracks tend to have more structural segments.
+- `energy`, `loudness`, and `danceability` form a moderately correlated cluster (r ≈ 0.2–0.34), hinting at shared musical traits in high-energy tracks.
+- Strong negative correlations:
+  - `acousticness` and `energy` (r = -0.72) — more acoustic songs tend to be less energetic.
+  - `acousticness` and `loudness` (r = -0.57) — quiet tracks are often more acoustic in nature.
+- `weeks_on_chart` and `peak_position` show only weak correlations with other predictors, reinforcing their potential usefulness as independent outcome indicators.
+- Overall, **most features are weakly correlated**, suggesting **low multicollinearity** and a diverse feature set suitable for modeling.
+
+<br><br>
+
+### **Handling Multicollinearity: Refining Features Based on Correlation**
+
+Highly correlated features can introduce redundancy and distort model interpretation — particularly in linear models. To simplify our model and reduce collinearity, we identify strongly correlated pairs (|r| ≥ 0.5) and make informed choices about what to retain, drop, or engineer.
+
+**Top Correlated Feature Pairs**
+
+The table below highlights the strongest relationships between variables, grouped by action type:
+
+```{r top-correlation-pairs, message=FALSE, warning=FALSE}
+# The following utilises functionality from the following packages: dplyr, tinyr, knitr, kabelExtra
+
+# Create interpreted and grouped correlation table
+cor_df <- as.data.frame(as.table(cor_matrix)) %>%
+  rename(Var1 = Var1, Var2 = Var2, Correlation = Freq) %>%
+  filter(Var1 != Var2) %>%                         
+  mutate(abs_cor = abs(Correlation)) %>%
+  filter(abs_cor >= 0.5) %>%                       
+  rowwise() %>%
+  mutate(pair = paste(sort(c(Var1, Var2)), collapse = " ~ ")) %>%  
+  ungroup() %>%
+  distinct(pair, .keep_all = TRUE) %>%             
+  arrange(desc(abs_cor)) %>%
+  mutate(
+    Interpretation = case_when(
+      pair == "duration_ms ~ sections" ~ "Longer songs tend to have more sections",
+      pair == "energy ~ loudness" | pair == "loudness ~ energy" ~ "Very closely related measures of intensity",
+      pair == "energy ~ acousticness" | pair == "acousticness ~ energy" ~ "Inverse relationship — acoustic tracks are less energetic",
+      pair == "loudness ~ acousticness" | pair == "acousticness ~ loudness" ~ "Acoustic tracks are generally quieter",
+      pair == "valence ~ danceability" | pair == "danceability ~ valence" ~ "Happy songs are more danceable",
+      TRUE ~ "Strong correlation"
+    ),
+    Group = case_when(
+      pair %in% c("energy ~ loudness", "loudness ~ energy") ~ "Redundant",
+      pair %in% c("duration_ms ~ sections") ~ "Redundant",
+      pair %in% c("valence ~ danceability", "danceability ~ valence") ~ "Complementary",
+      pair %in% c("energy ~ acousticness", "acousticness ~ energy", "acousticness ~ loudness", "loudness ~ acousticness") ~ "Candidate for Feature Engineering",
+      TRUE ~ "Other"
+    )
+  )
+
+# Display top 10 with grouped interpretation
+cor_df %>%
+  select(`Variable Pair` = pair, `r-value` = Correlation, Group, Interpretation) %>%
+  head(10) %>%
+  kable("html", caption = "Top 10 Strongest Correlated Variable Pairs (with Groupings)") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover"))
+
+
+
+```
+
+
+**Modelling Implications & Feature Strategy**
+
+- Redundant pairs like `energy` and `loudness`, or `duration_ms` and `sections`, provide overlapping information. One can typically be dropped to reduce noise and multicollinearity.
+- Feature engineering opportunities include pairs with inverse relationships, like `acousticness` ~ `energy`, which could be combined or transformed into interaction terms.
+- Complementary pairs (e.g. `valence` ~ `danceability`) capture distinct dimensions of mood and movement — useful to retain both.
+- Simplifying models through removal or dimensionality reduction (PCA, VIF filtering) can improve training speed, interpretability, and generalisation.
+
+
+**Feature Selection Strategy:**
+
+For each highly correlated pair, we retain the more interpretable or informative feature. The table below summarizes the decisions:
+
+| **Feature to Drop** | **Retain Instead**       | **Reason**                                                                 |
+|---------------------|--------------------------|-----------------------------------------------------------------------------|
+| `loudness`          | `energy`                 | `energy` captures dynamic intensity, is scaled 0–1, and includes loudness. |
+| `sections`          | `duration_ms`            | `duration_ms` is more interpretable; high correlation makes `sections` redundant.             |
+| (Possibly engineer)  | `acousticness`, `loudness`, `energy`  | These could form a composite score for production or vocality. |
+| (Keep both)                   | `valence` and `danceability` | Represent distinct emotional and rhythmic traits — both are useful predictors.                         |
+
+<br><br>
+
+## **Network Graph: Revealing Feature Clusters through Correlation**
+
+We use correlation network graphs to explore interrelationships among features from a structural perspective. Nodes represent variables, colored by functional group (e.g., Intensity, Mood & Feel, Structure), and edges represent pairwise Pearson correlations.
+
+We visualized the dataset under two thresholds:
+
+- Threshold ≥ 0.1: Captures both strong and subtle relationships, offering a holistic overview of the feature space.
+- Threshold ≥ 0.5: Isolates core relationships, highlighting the most redundant or functionally complementary pairs.
+
+These complementary views help us understand not just which variables relate to each other — but how strongly and within what thematic context.
+
+**Correlation Threshold 0.1**
+
+```{r correlation_network-0.1, message=FALSE, warning=FALSE, results='asis'}
+# The following utilises functionality from the following packages: dplyr, igraph, visNetwork, htmlwidgets, reshape2 & scales
+
+# Define numeric variables and exclude unnecessary ones
+cor_exclude <- c("target", "on_billboard", "mode", "key", "time_signature")
+spotify_numeric <- spotify_raw %>%
+  select(where(is.numeric)) %>%
+  select(-all_of(cor_exclude))
+
+# Compute correlation matrix
+cor_matrix_spotify <- cor(spotify_numeric, use = "pairwise.complete.obs")
+
+# Melt correlation matrix to long format, filter strong correlations
+cor_threshold <- 0.1
+cor_long <- melt(cor_matrix_spotify, na.rm = TRUE) %>%
+  rename(Var1 = Var1, Var2 = Var2, Correlation = value) %>%
+  filter(abs(Correlation) >= cor_threshold & Var1 != Var2)
+
+# Create graph object
+cor_graph <- graph_from_data_frame(cor_long, directed = FALSE)
+
+# Create nodes and edges
+nodes <- data.frame(id = V(cor_graph)$name, label = V(cor_graph)$name)
+edges <- data.frame(from = cor_long$Var1, to = cor_long$Var2,
+                    width = abs(cor_long$Correlation) * 5,
+                    color = ifelse(cor_long$Correlation > 0, "steelblue", "tomato"))
+
+# Assign groups based on thematic clusters
+cluster_mapping <- list(
+  "Intensity" = c("energy", "loudness"),
+  "Structure" = c("duration_ms", "sections", "chorus_hit"),
+  "Mood & Feel" = c("valence", "danceability", "acousticness"),
+  "Experimental" = c("instrumentalness", "speechiness", "liveness"),
+  "Chart Performance" = c("peak_position", "weeks_on_chart")
+)
+
+nodes$group <- sapply(nodes$id, function(var) {
+  matched_group <- names(cluster_mapping)[sapply(cluster_mapping, function(vars) var %in% vars)]
+  if (length(matched_group) > 0) matched_group else "Other"
+})
+
+# Visualise
+network <- visNetwork(nodes, edges) %>%
+  visEdges(smooth = FALSE) %>%
+  visOptions(highlightNearest = TRUE,
+             selectedBy = list(variable = "group", multiple = TRUE)) %>%
+  visLegend() %>%
+  visGroups(groupname = "Intensity", color = "#F8766D") %>%
+  visGroups(groupname = "Structure", color = "#7CAE00") %>%
+  visGroups(groupname = "Mood & Feel", color = "#00BFC4") %>%
+  visGroups(groupname = "Experimental", color = "#C77CFF") %>%
+  visGroups(groupname = "Chart Performance", color = "#FF61C3") %>%
+  visGroups(groupname = "Other", color = "#999999") %>%
+  visLayout(randomSeed = 42) %>%
+  visInteraction(zoomView = FALSE)
+
+# Output
+network
+
+```
+
+<br><br>
+
+**Correlation Threshold 0.5**
+
+```{r correlation_network-0.2, message=FALSE, warning=FALSE, results='asis'}
+# The following utilises functionality from the following packages: dplyr, igraph, visNetwork, htmlwidgets, reshape2 &scales
+
+# Define numeric variables and exclude unnecessary ones
+cor_exclude <- c("target", "on_billboard", "mode", "key", "time_signature")
+spotify_numeric <- spotify_raw %>%
+  select(where(is.numeric)) %>%
+  select(-all_of(cor_exclude))
+
+# Compute correlation matrix
+cor_matrix_spotify <- cor(spotify_numeric, use = "pairwise.complete.obs")
+
+# Melt correlation matrix to long format, filter strong correlations
+cor_threshold <- 0.2
+cor_long <- melt(cor_matrix_spotify, na.rm = TRUE) %>%
+  rename(Var1 = Var1, Var2 = Var2, Correlation = value) %>%
+  filter(abs(Correlation) >= cor_threshold & Var1 != Var2)
+
+# Create graph object
+cor_graph <- graph_from_data_frame(cor_long, directed = FALSE)
+
+# Create nodes and edges
+nodes <- data.frame(id = V(cor_graph)$name, label = V(cor_graph)$name)
+edges <- data.frame(from = cor_long$Var1, to = cor_long$Var2,
+                    width = abs(cor_long$Correlation) * 5,
+                    color = ifelse(cor_long$Correlation > 0, "steelblue", "tomato"))
+
+# Assign groups based on thematic clusters
+cluster_mapping <- list(
+  "Intensity" = c("energy", "loudness"),
+  "Structure" = c("duration_ms", "sections", "chorus_hit"),
+  "Mood & Feel" = c("valence", "danceability", "acousticness"),
+  "Experimental" = c("instrumentalness", "speechiness", "liveness"),
+  "Chart Performance" = c("peak_position", "weeks_on_chart")
+)
+
+nodes$group <- sapply(nodes$id, function(var) {
+  matched_group <- names(cluster_mapping)[sapply(cluster_mapping, function(vars) var %in% vars)]
+  if (length(matched_group) > 0) matched_group else "Other"
+})
+
+# Visualise
+network <- visNetwork(nodes, edges) %>%
+  visEdges(smooth = FALSE) %>%
+  visOptions(highlightNearest = TRUE,
+             selectedBy = list(variable = "group", multiple = TRUE)) %>%
+  visLegend() %>%
+  visGroups(groupname = "Intensity", color = "#F8766D") %>%
+  visGroups(groupname = "Structure", color = "#7CAE00") %>%
+  visGroups(groupname = "Mood & Feel", color = "#00BFC4") %>%
+  visGroups(groupname = "Experimental", color = "#C77CFF") %>%
+  visGroups(groupname = "Chart Performance", color = "#FF61C3") %>%
+  visGroups(groupname = "Other", color = "#999999") %>%
+  visLayout(randomSeed = 42) %>%
+  visInteraction(zoomView = FALSE)
+
+# Output
+network
+
+```
+
+
+**Key Observations and Insights**
+
+**Strong Redundancy**
+
+- Highly correlated pairs like `duration_ms` ~ `sections` and `energy` ~ `loudness` suggest duplicated signal, ideal candidates for removal, merging, or dimensionality reduction (e.g., PCA, latent grouping).
+
+**Acousticness as a Bridge Variable**
+
+- `acousticness` spans multiple domains: it negatively correlates with `energy` and `loudness`, while showing positive ties with more niche or experimental characteristics. It acts as a transitional trait between mainstream intensity and artistic nuance.
+
+**Chart Metrics as Hubs**
+
+- Features like ``weeks_on_chart` and `peak_position` are highly connected, forming links with both structural and expressive features. Their centrality likely reflects downstream effects of musical attributes on popularity.
+
+**Mood & Feel Pairing**
+- The tight bond between `valence` and `danceability` reflects a “feel-good” axis — happy, danceable songs may have an edge in commercial appeal.
+
+**Multi-Dimensional Interactions**
+
+- The network confirms that categories like Intensity, Mood, and Experimental are interwoven, not siloed — reinforcing the importance of accounting for cross-category effects in modeling.
+
+**Takeaways from the Correlation Network Approach**
+
+- A lower threshold (0.1) surfaces nuanced connections, helping spot subtle trends or secondary effects.
+- A higher threshold (0.5) spotlights core dependencies and redundancies — ideal for feature pruning or latent factor design.
+- Thematic grouping aids interpretation, turning numeric relationships into meaningful storylines about musical structure and hit potential.
+- Network-based correlation analysis supports a visually intuitive form of feature engineering, revealing both risk of multicollinearity and opportunities for dimensional synthesis.
+
+<br><br>
+
+# **Assessing Distributions: Skewness & Kurtosis**
+
+Understanding variable distributions is key to selecting suitable modeling techniques. Non-normality can violate statistical assumptions and introduce instability into models.
+
+## **Summary: Skewness & Kurtosis Across Variables**
+
+The following features exhibit extreme right-skew and heavy tails:
+
+`duration_ms`, `sections`, `speechiness`, `chorus_hit`, `weeks_on_chart`
+
+Others like `liveness`, `instrumentalness`, and `loudness` show moderate skew or tail weight, while features such as `tempo`, `valence`, and `energy` are roughly symmetric.
+
+```{r skewness-kurtosis, message=FALSE, warning=FALSE}
+# The following utilises functionality from the following packages: moments
+
+# Create skewness + kurtosis table
+skew_kurt_df <- data.frame(
+  Variable = names(spotify_scaled_combined)[sapply(spotify_scaled_combined, is.numeric)],
+  Skewness = sapply(spotify_scaled_combined[sapply(spotify_scaled_combined, is.numeric)], skewness, na.rm = TRUE),
+  Kurtosis = sapply(spotify_scaled_combined[sapply(spotify_scaled_combined, is.numeric)], kurtosis, na.rm = TRUE)
+)
+
+# Round to improve formatting
+skew_kurt_df <- skew_kurt_df %>%
+  mutate(
+    Skewness = round(Skewness, 3),
+    Kurtosis = round(Kurtosis, 2),
+    Interpretation = case_when(
+      Skewness > 2 & Kurtosis > 10 ~ "Extremely right-skewed — heavy tail / extreme outliers",
+      Skewness > 1 & Kurtosis > 4 ~ "Moderately right-skewed — most values low, long upper tail",
+      Skewness < -1 & Kurtosis > 4 ~ "Moderately left-skewed — long lower tail",
+      abs(Skewness) < 0.5 & Kurtosis < 3 ~ "Roughly symmetric / normal-like",
+      TRUE ~ "Mild asymmetry or moderate tail"
+    )
+  ) %>%
+  arrange(desc(abs(Skewness)))  # Sort by skewness strength
+
+# Display table with formatting
+kable(skew_kurt_df, format = "html", caption = "Skewness & Kurtosis of Numeric Variables (Sorted by Skewness)") %>%
+  kable_styling(full_width = FALSE, position = "center") %>%
+  column_spec(3, width = "6em") %>%    # Kurtosis column narrower
+  column_spec(4, width = "25em")       # Interpretation column wider
+
+```
+
+
+**Implications for Preprocessing & Modeling**
+
+**1. Transform or Normalize**
+
+- Apply log transformation or winsorisation to `duration_ms`, `sections`, and `chorus_hit` to reduce distortion from extreme values.
+
+**2. Binning for Interpretability**
+
+- Consider binning `speechiness` and `weeks_on_chart` into discrete categories (e.g., low/medium/high) to simplify interpretation and modeling.
+
+**3. Model Suitability**
+
+- Linear models (e.g., Logistic Regression, LDA/QDA) assume normality – these variables may breach that assumption.
+- Tree-based models (e.g., Random Forest, XGBoost) are more robust but can still be influenced by extreme tails.
+
+**4. Feature Engineering Opportunity**
+
+- Skewed variables may serve as flags for uniqueness:
+  - e.g., High `speechiness` = Spoken Word
+  - High `sections` = Complex song structure
+  - High `chorus_hit` = Long intro or delayed hook
+
+
+<br><br>
+
+# **Understanding Data Distributions: Interactive Histograms**
+
+<br>
+
+**Interactive Histogram with Commentary**
+
+```{r interactive-histogram, message=FALSE, warning=FALSE}
+# The following utilises functionality from the following packages: dplyr, plotly & shiny
+
+# Extract numeric features (excluding IDs, outlier count, or binary flags)
+numeric_features <- names(spotify_raw[sapply(spotify_raw, is.numeric)])
+numeric_features <- setdiff(numeric_features, c("outlier_count", "on_billboard"))
+
+# Define custom commentary for Spotify features
+commentary_list <- list(
+  "duration_ms" = "Heavily right-skewed with some extreme outliers. Most tracks fall within typical radio-friendly lengths, but long-tailed outliers could represent extended versions, remixes, or experimental works.",
+  "sections" = "Very steep drop-off with a few extreme values, indicating that most songs follow conventional structure (few sections), while some may include experimental or extended arrangements.",
+  "speechiness" = "Highly right-skewed — the vast majority of tracks have very low speechiness values, indicating that most songs contain little or no spoken content. A small number of tracks (e.g. podcasts, rap) account for the higher values, forming a long tail.",
+  "chorus_hit" = "Right-skewed with most values clustering around zero. This reflects the early arrival of choruses in mainstream pop, with some outliers where the chorus appears much later.",
+  "weeks_on_chart" = "Sharp right skew shows that most songs drop off quickly, while a select few dominate charts for extended periods. Useful for measuring longevity or 'stickiness' of hits.",
+  "liveness" = "Right-skewed — most tracks have low liveness scores, suggesting they were recorded in studio settings. A small tail of higher values may reflect live recordings or tracks with detectable audience presence.",
+  "instrumentalness" = "Bimodal and highly skewed — the large spike near 0 shows most tracks have vocals, while a small but distinct cluster near 1 represents fully instrumental tracks. This may imply genre clusters (e.g. ambient vs. pop).",
+  "loudness" = "Slightly left-skewed, mostly centered around a normalized loudness range. May reflect mastering practices in modern music production, where tracks are optimized for streaming loudness levels.",
+  "peak_position" = "Strongly right-skewed. Most tracks reach poor chart positions, while only a few achieve top ranks. This skew reflects a power-law-like distribution common in popularity metrics.",
+  "acousticness" = "U-shaped distribution — majority of songs are either highly acoustic or not at all. This suggests a strong genre divide (e.g. acoustic folk vs. fully electronic), and may benefit from binning or segmentation.",
+  "tempo" = "Symmetrical and approximately normal, centered around zero (likely z-scaled). This suggests a balanced tempo distribution, useful without transformation.",
+  "energy" = "Slight right skew — a fairly broad spread across energy values, with a tendency toward energetic tracks. This balance suggests the variable could be used effectively without transformation.",
+  "danceability" = "Approximately normal — this is one of the most balanced distributions in the dataset. Most tracks fall within a moderate-to-high danceability range, suggesting strong coverage of mainstream music.",
+  "valence" = "Multimodal — with peaks at both low and high values, valence reveals emotional polarisation. Tracks tend to either sound sad or happy, with fewer neutral ones. This may capture contrasting genre or mood patterns.",
+  "key" = "The distribution of musical keys appears relatively even, with some keys slightly more common (e.g., 0, 2, 7). This likely reflects popular tonal preferences in mainstream music (e.g., C major, D major, G major). Lower counts in keys like 3 and 6 suggest they are less frequently used, possibly due to perceived dissonance or genre conventions. Would benefit from cyclical encoding.",
+  "mode" = "Mode shows a clear binary distribution, with a strong dominance of mode = 1 (Major key). This aligns with the upbeat, accessible nature of most popular music. Mode = 0 (Minor key) tracks still form a substantial subset, reflecting emotional or dramatic tracks.",
+  "target" = "The target variable is perfectly balanced, with equal counts of 0 and 1. This suggests either deliberate rebalancing or sampling to ensure even representation between the two groups (e.g., hits vs. non-hits). It is well-suited for binary classification tasks.",
+  "time_signature" = "Most tracks use the standard 4/4 time signature (labelled as 4), confirming its dominance in popular music. Smaller peaks at 3 and 5 reflect alternative meters, often associated with niche genres or experimental pieces. The near-zero counts for 0, 1, and 2 may reflect anomalies, encoding issues, or rare rhythmic structures."
+)
+
+# Shiny UI
+ui_histogram <- fluidPage(
+  titlePanel(""),
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("feature", "Select a feature:", choices = numeric_features)
+    ),
+    mainPanel(
+      plotlyOutput("histogram", height = "300px", width = "100%"),
+      br(),
+      h4("Feature Commentary"),
+      textOutput("commentary")
+    )
+  )
+)
+
+# Shiny Server
+server_histogram <- function(input, output) {
+  # Render histogram
+  output$histogram <- renderPlotly({
+    plot_ly(
+      x = spotify_raw[[input$feature]],
+      type = "histogram",
+      marker = list(color = "steelblue"),
+      nbinsx = 50
+    ) %>%
+      layout(
+        title = paste("Histogram of", input$feature),
+        xaxis = list(title = input$feature),
+        yaxis = list(title = "Frequency")
+      )
+  })
+  
+  # Render commentary
+  output$commentary <- renderText({
+    commentary_list[[input$feature]] %||% "No commentary available for this feature yet."
+  })
+}
+
+# Run app
+shinyApp(ui_histogram, server_histogram)
+
+```
+
+<br><br>
+
+# **Exploring Interactions with Trend-Line Scatterplots**
+
+Beyond examining individual features, we use scatterplots with trend lines to explore multivariate relationships in the Spotify dataset. This approach helps to:
+
+- Reveal **nonlinear patterns** or **threshold effects** related to track success.
+- Compare audio and structural characteristics between hits and non-hits.
+- Explore how features like `energy`, `acousticness`, or `chorus timing` relate to `weeks_on_chart` or `peak_position`.
+
+**Creating the `Hit_Flag` Variable**
+
+To enable clearer comparisons, we engineered a binary `Hit_Flag`:
+
+- Tracks with peak position ≤ 10 are labeled as hits.
+- All others are labeled as non-hits.
+
+This segmentation isolates traits commonly found in top-performing songs, helping us assess what sets them apart.
+
+```{r scatterplot-top10, message=FALSE, warning=FALSE}
+# The following utilises functionality from the following packages: dplyr, plotly & shiny
+
+# Feature engineering
+spotify_raw$Hit_Flag <- ifelse(spotify_raw$peak_position <= 10, 1, 0)
+
+# Define numeric variables (including manually added binary targets)
+numeric_y_vars <- c(
+  names(spotify_raw)[sapply(spotify_raw, is.numeric)],
+  "on_billboard", "target"
+) %>% unique()
+
+# Shiny UI
+ui <- fluidPage(
+  titlePanel("Interactive Scatterplot: Spotify Features vs Chart Success"),
+  fluidRow(
+    column(width = 3,
+           tags$style(HTML(".selectize-input { font-size: 10px; }")),
+           selectInput("x_feature", "Select X-axis:", 
+                       choices = names(spotify_raw)[sapply(spotify_raw, is.numeric)], 
+                       selected = "duration_ms"),  # already z-scored
+           selectInput("y_feature", "Select Y-axis:", 
+                       choices = numeric_y_vars, 
+                       selected = "weeks_on_chart"),
+           selectInput("color_feature", "Color by:", 
+                       choices = c("Hit_Flag"), 
+                       selected = "Hit_Flag")
+    ),
+    column(width = 9,
+           plotlyOutput("scatterplot", height = "350px", width = "100%")
+    )
+  )
+)
+
+# Shiny Server
+server <- function(input, output) {
+  output$scatterplot <- renderPlotly({
+    
+    # Dynamic label for clarity
+    spotify_raw$Hit_Label <- ifelse(spotify_raw$Hit_Flag == 1, "Top 10 Hit", "Non-Hit")
+    
+    p <- ggplot(spotify_raw, aes(x = .data[[input$x_feature]], 
+                                 y = .data[[input$y_feature]], 
+                                 color = Hit_Label,
+                                 shape = Hit_Label,
+                                 linetype = Hit_Label)) +
+      geom_point(alpha = 0.5, size = 1) +
+      geom_smooth(method = "lm", formula = y ~ x, se = FALSE, 
+                  aes(group = Hit_Label), 
+                  linewidth = 0.8, color = "black", show.legend = TRUE) +
+      scale_color_manual(values = c("Top 10 Hit" = "firebrick", "Non-Hit" = "steelblue")) +
+      scale_shape_manual(values = c("Top 10 Hit" = 17, "Non-Hit" = 4)) +
+      scale_linetype_manual(values = c("Top 10 Hit" = "solid", "Non-Hit" = "dashed")) +
+      theme_minimal(base_size = 10) +
+      labs(x = input$x_feature,
+           y = input$y_feature,
+           color = "Chart Category",
+           shape = "Chart Category",
+           linetype = "Chart Category")
+    
+    ggplotly(p) %>% layout(
+      legend = list(orientation = "h", x = 0.5, y = -0.2, xanchor = "center", yanchor = "top")
+    )
+  })
+}
+
+# Launch the app
+shinyApp(ui = ui, server = server)
+
+```
+
+
+
+**Example: Danceability vs. Weeks on Chart (Top 10 Hits)**
+
+This scatterplot examines the relationship between a track’s `danceability` and its chart longevity, focusing exclusively on Top 10 hits (Hit_Flag = 1).
+
+**Key Observations:**
+
+1. Modest Positive Association
+    - The black trend line shows a slight upward slope, indicating that higher `danceability` may be weakly associated with longer chart presence. While the effect is subtle, it could reflect enhanced audience retention or replay value for more danceable tracks.
+2. Clustering & Spread
+    - Most observations fall within:
+      - Danceability 0.4–0.7
+      - 1–3 weeks on the chart
+    - This pattern suggests that successful tracks typically occupy a moderate range of danceability, with only a few high-outlier songs exhibiting extended longevity — likely representing club-friendly or viral tracks.
+3. Implications
+    - Modeling: `danceability` is a useful candidate for inclusion in multivariate models predicting chart duration or hit status.
+    - Strategy: From a commercial standpoint, moderate-to-high `danceability` may enhance playlistability and support longer-term engagement, particularly when paired with complementary features like `energy` or `valence`.
+
+<br><br>
+
+# **Identifying Variables for Log Transformation**
+
+Log transformation is applied to correct extreme skewness, stabilize variance, and promote linearity—key for models sensitive to distributional assumptions (e.g., linear regression, logistic regression).
+
+We target variables with **skewness > 2** and **kurtosis > 5**, using histograms and QQ plots to validate the improvements.
+
+**Rationale for Log Transformation**
+
+1. Correcting Extreme Right-Skew
+  - Reduces long tails and compresses high-magnitude outliers, which can otherwise dominate model learning or inflate error terms.
+2. Variance Stabilization
+  - Helps satisfy homoscedasticity by reducing heterogeneity in spread, improving regression reliability.
+3. Enhancing Linearity & Model Fit
+  - Many statistical models assume linear relationships between predictors and outcomes—log transformation helps approximate this in skewed data.
+
+```{r transformation-table, message=FALSE, warning=FALSE}
+# The following utilises functionality from the following packages: e1071
+
+# Calculate skewness and kurtosis again if needed
+skew_kurt_df <- data.frame(
+  Variable = names(spotify_raw)[sapply(spotify_raw, is.numeric)],
+  Skewness = sapply(spotify_raw[sapply(spotify_raw, is.numeric)], skewness, na.rm = TRUE),
+  Kurtosis = sapply(spotify_raw[sapply(spotify_raw, is.numeric)], kurtosis, na.rm = TRUE)
+)
+
+# Add transformation decisions
+skew_kurt_df$Transformation_Decision <- with(skew_kurt_df, ifelse(
+  abs(Skewness) > 2 & abs(Kurtosis) > 5, "✅ Consider log transform",
+  ifelse(abs(Skewness) > 1 & abs(Kurtosis) > 3, "⚠️ Consider standardization or binning",
+         "❌ No transformation needed")
+))
+
+# Optional: order by Skewness
+skew_kurt_df <- skew_kurt_df %>% arrange(desc(abs(Skewness)))
+
+# Display using kable
+kable(skew_kurt_df, caption = "Spotify: Transformation Decisions Based on Skewness & Kurtosis") %>%
+  kableExtra::kable_styling(full_width = FALSE, position = "center")
+
+```
+
+**Standardization for Scale Consistency**
+
+For variables with moderate skew or differing scales, Z-score standardization was applied to center distributions and ensure equal contribution to distance-based models or regularization techniques. This was particularly relevant for features like:
+
+- `liveness` (moderately right-skewed)
+- `loudness` (mild left-skew, unscaled)
+- Variables not log-transformed but deviating from [0,1] bounds.
+
+
+```{r log-transformation, message=FALSE, warning=FALSE}
+
+# Apply log transformation to skewed variables from spotify_raw
+spotify_transformed <- spotify_raw %>%
+  mutate(
+    log_duration_ms = log(duration_ms + 1),
+    log_sections = log(sections + 1),
+    log_speechiness = log(speechiness + 1),
+    log_chorus_hit = log(chorus_hit + 1),
+    log_weeks_on_chart = log(weeks_on_chart + 1),
+    log_liveness = log(liveness + 1),
+    log_instrumentalness = log(instrumentalness + 1)
+  )
+
+# View summary of transformed variables
+summary(spotify_transformed %>% select(starts_with("log_")))
+
+```
+
+
+
+### **Before and After Histograms**
+
+```{r log-transformation-histograms, message=FALSE, warning=FALSE, fig.width=10, fig.height=10}
+# The following utilises functionality from the following packages: ggplot2,patchwork & stringr
+
+# Define variables for comparison
+vars_to_plot <- c("duration_ms", "sections", "chorus_hit", "instrumentalness")
+
+# Function to create before and after histograms
+plot_histograms <- function(var) {
+  # Title wrapping
+  title_before <- str_wrap(paste("Before Log Transformation:", var), width = 35)
+  title_after  <- str_wrap(paste("After Log Transformation:", paste0("log_", var)), width = 35)
+
+  # Before transformation
+  p1 <- ggplot(spotify_transformed, aes(x = .data[[var]])) +
+    geom_histogram(fill = "steelblue", bins = 30, alpha = 0.7) +
+    labs(title = title_before, x = var, y = "Frequency") +
+    theme_minimal()
+
+  # After transformation
+  p2 <- ggplot(spotify_transformed, aes(x = .data[[paste0("log_", var)]])) +
+    geom_histogram(fill = "darkorange", bins = 30, alpha = 0.7) +
+    labs(title = title_after, x = paste("log_", var), y = "Frequency") +
+    theme_minimal()
+
+  # Combine side by side
+  p1 + p2
+}
+
+# Generate all histograms
+plots <- lapply(vars_to_plot, plot_histograms)
+
+# Combine into a grid layout (2 plots per row = 2 before/after comparisons per row)
+wrap_plots(plots, ncol = 1) + 
+  plot_layout(heights = rep(3, length(plots)))  # Optional: adjust height scaling
+
+```
+
+### **Before and After QQ Plots**
+
+```{r log-transformation-qqplots, message=FALSE, warning=FALSE, fig.height=18, fig.width=10}
+# The following utilises functionality from the following packages: ggplot2, patchwork, qqplotr & stringr
+
+# Define variables for comparison
+vars_to_plot <- c("duration_ms", "sections", "chorus_hit", "instrumentalness")
+
+# Function to create QQ plots before and after log transformation
+plot_qqplots <- function(var) {
+  # Title formatting
+  title_before <- str_wrap(paste("QQ Plot Before Log:", var), width = 35)
+  title_after  <- str_wrap(paste("QQ Plot After Log:", paste0("log_", var)), width = 35)
+
+  # QQ plot before log transformation
+  p1 <- ggplot(spotify_transformed, aes(sample = .data[[var]])) +
+    stat_qq_point(alpha = 0.6) +
+    stat_qq_line(color = "red", linewidth = 0.5, linetype = "dashed") +
+    labs(title = title_before, x = "Theoretical Quantiles", y = var) +
+    theme_minimal()
+
+  # QQ plot after log transformation
+  p2 <- ggplot(spotify_transformed, aes(sample = .data[[paste0("log_", var)]])) +
+    stat_qq_point(alpha = 0.6) +
+    stat_qq_line(color = "red", linewidth = 0.5, linetype = "dashed") +
+    labs(title = title_after, x = "Theoretical Quantiles", y = paste0("log_", var)) +
+    theme_minimal()
+
+  # Combine side-by-side
+  p1 + p2
+}
+
+# Generate all QQ plots
+qq_plots <- lapply(vars_to_plot, plot_qqplots)
+
+# Arrange vertically in a 4-row layout
+wrap_plots(qq_plots, ncol = 1, heights = rep(5, length(qq_plots)))
+
+
+```
+
+## **Visualizing the Impact of Log Transformations**
+
+We assess the effect of transformation using before/after histograms and QQ plots. Here’s a breakdown by variable:
+
+`duration_ms`
+
+- **Before**: Extreme right skew with high kurtosis; long upper tail.
+- **After**: Histogram approximates normality; QQ plot shows reduced deviation from diagonal.
+- **Action**: Keep log transformation. Follow with Z-score normalization to align with other features.
+
+`sections`
+
+- **Before**: Similar to duration_ms, heavily skewed with extreme values.
+- **After**: Marked improvement in shape; distribution becomes symmetric.
+- **Action**: Keep log transformation. Z-score scaling recommended for model compatibility.
+
+`chorus_hit`
+
+- **Before**: Long right tail, sharp spike near zero.
+- **After**: Smoother, unimodal distribution; normal approximation improved.
+- **Action**: Retain log transformation. Standardization optional depending on model type.
+
+`instrumentalness`
+
+- **Before**: Highly skewed, structurally bimodal; dense spike at 0.
+- **After**: Log-transformation has little effect; QQ plot remains non-normal.
+- **Action**: Discard log transformation. Consider binning (e.g., low/mid/high) or retain raw for tree-based models.
+
+```{r log-summary, message=FALSE, warning=FALSE}
+
+# Summary of actions taken
+actions_df <- data.frame(
+  Variable = c("duration_ms", "sections", "chorus_hit", "instrumentalness", "liveness", "loudness"),
+  Transformation = c("✅ Log", "✅ Log", "✅ Log", "❌ Not effective", "❌ No log", "❌ No log"),
+  Standardization = c("✅ Z-score", "✅ Z-score", "Optional", "❌ Avoid", "✅ Z-score", "✅ Z-score")
+)
+
+# Render the table
+kable(actions_df, format = "html", caption = "Summary of Actions Taken") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover"))
+
+```
+
+
+<br><br>
+
+# **Cyclical Encoding**
+
+Features like musical key are cyclical in nature. For example: <br>
+- Keys: 0 (C), 1 (C#), ..., 11 (B) — 0 and 11 are actually next to each other musically. <br>
+- Days of week, hours of day, months of year — same concept. <br>
+
+Cyclical encoding handles this by transforming the raw value using sine and cosine. This transformation ensures that musically adjacent keys (e.g., 0 and 11) are close in feature space, which is beneficial for distance-based or linear models.
+
+To preserve this structure, we apply cyclical encoding using sine and cosine transforms and compare it with factoring.
+
+**Comparing Encoding Strategies**
+
+We recommend comparing factor vs. cyclical encoding empirically through:
+
+- Model performance
+  - Use cross-validation to compare classification metrics (Accuracy, F1, ROC AUC, Log-loss) across encoding types.
+- Feature importance
+  - With tree-based models (e.g., XGBoost), check whether key_sin / key_cos contribute more consistently than raw key.
+- Partial Dependence Plots (PDPs)
+  - Factor encoding produces a discrete effect per key; cyclical encoding yields a smoother, continuous influence across the tonal circle.
+
+
+```{r model-encoding-table, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Create the data frame
+encoding_table <- data.frame(
+  Model = c("Random Forest", "Decision Trees", "Logistic Regression", "SVM", "XGBoost"),
+  Recommendation = c("✅ Factor preferred", 
+                     "✅ Factor preferred", 
+                     "🔁 Cyclical encoding recommended", 
+                     "🔁 Cyclical encoding preferred", 
+                     "✅ Factor OR cyclical"),
+  Reason = c(
+    "Trees handle categorical splits well — no need to encode",
+    "Same as above",
+    "Linear models benefit from the smooth relationship",
+    "Works better with continuous features",
+    "Can handle both, but you may test both to see which wins"
+  )
+)
+
+# Render the table
+kable(encoding_table, "html", caption = "Model-Specific Encoding Recommendations") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover"))
+
+```
+
+
+```{r plot_raw, echo=FALSE, message=FALSE, warning=FALSE}
+
+ggplot(spotify_raw, aes(x = key, y = on_billboard)) +
+  geom_point(alpha = 0.1) +
+  geom_smooth(method = "loess", se = FALSE) +
+  labs(title = "Raw Key vs Billboarding (Factor version)")
+
+
+```
+
+
+## **Factor Version of Key** <br>
+Your raw key plot (as a factor) shows very marginal variation in the probability of Billboard success across key values.
+
+The smoothed trend is relatively flat with some very slight undulations, suggesting that the musical key on its own isn't a strong driver of chart performance.
+
+This also supports the idea that there's no linear relationship between key (as a circular variable from 0 to 11) and success, justifying the need to either treat it as: <br>
+- A categorical feature (if the modeling method supports it), or <br>
+- A cyclically encoded variable (if using regression-based models or neural networks). <br>
+
+
+
+```{r plot_cyclical, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Cyclical encoding
+key_sin <- sin(2 * pi * spotify_raw$key / 12)
+key_cos <- cos(2 * pi * spotify_raw$key / 12)
+
+# Compare against the previous plot
+ggplot(spotify_raw, aes(x = atan2(key_sin, key_cos), y = on_billboard)) +
+  geom_point(alpha = 0.1) +
+  geom_smooth(method = "loess", se = FALSE) +
+  labs(title = "Cyclical Encoded Key (Angle) vs Billboarding")
+
+```
+
+
+**Interpretation: Minimal Predictive Value**
+
+- **Factor encoding**: Shows only minor variation in success probability across keys.
+- **Cyclical encoding**: Captures subtle nonlinear variation, but predictive power remains low in either form.
+
+However, cyclical encoding is preferred in models that assume linearity or use distances (e.g., regression, SVMs), as it better reflects musical topology.
+
+
+<br><br>
+
+# **Final Thoughts & Next Steps**
+
+This exploratory analysis has provided a solid foundation for preprocessing and feature engineering in the modeling phase. Key data transformations and encoding decisions were guided by distributional diagnostics, correlation structure, and domain relevance.
+
+**Summary of Preprocessing Actions**
+
+- **Drop**: `target`, `track`, `artist`, `track_norm`, `artist_norm`, `peak_position`, `weeks_on_chart`, `first_charted`, `last_charted`
+- **Log Transform**: Applied to highly skewed variables to stabilize variance and improve normality:
+  - `duration_ms`, `sections`, `chorus_hit`
+- **Categorical Binning / Grouping**: Decided not to do this so that the decision tree based models can fine-tune the best splits.
+  - Potentially utilise these for binning in other models like Logistic Regression.
+- **Z-score Standardization**: For variables on different scales or with moderate skew:
+  - `log_duration_ms`, `log_sections`, `log_chorus_hit`, `tempo`, `loudness`
+- **Cyclical Encoding**: Decided to keep it simple and factor `key` instead
+- **Binary Encoding**:
+  - `mode`
+- **Factor Conversion**: For discrete categorical variables where cyclic encoding is not used:
+  - `key`, `time_signature`
+- **Interaction Terms (for modeling exploration)**: Potentially meaningful combinations:
+  - `valence` × `energy`, `tempo` × `time_signature`
+
+
