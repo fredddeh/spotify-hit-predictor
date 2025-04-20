@@ -4,3 +4,11 @@ venv/
 # Data files
 data/*.csv
 data/*.json
+
+# Ignore cloned subrepo
+rwd-billboard-data/
+
+# Common extras to ignore
+.env
+__pycache__/
+.vscode/
