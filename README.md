@@ -14,7 +14,7 @@ The project includes:
 We also reflect on model limitations, particularly the influence of temporal trends and the challenge of sampling non-hits fairly.
 
 
----
+
 
 ## Data Sources
 
@@ -51,7 +51,7 @@ The original outcome variable in the dataset is `target`, where 1 indicates a Bi
 A full description of features and the methodology for defining non-hits is available on the [Kaggle dataset page](https://www.kaggle.com/datasets/theoverman/the-spotify-hit-predictor-dataset).
 
 
----
+
 
 ## Contributors
 
@@ -62,7 +62,7 @@ This group project was completed by MSc Data Science students at the University 
 - Duru Demirbag  
 - Hannah McAuley
 
----
+
 
 ## Project Structure
 
@@ -112,7 +112,7 @@ spotify-hit-predictor/
 
 ```
 
----
+
 
 ## How to Run the Project
 
@@ -127,7 +127,7 @@ spotify-hit-predictor/
 
 > All file paths use **relative references** (e.g. `../data/...`) for reproducibility across systems
 
----
+
 
 ## Models Included
 
@@ -164,7 +164,7 @@ source("packages.R")
 ```
 
 
----
+
 
 ## Results
 
@@ -185,7 +185,7 @@ All results can also be reproduced by running the code files provided in the `sc
 **Summary:**  
 XGBoost and Random Forest models performed best overall (Accuracy = 78%, AUC = 0.86), revealing strong non-linear relationships between audio features and chart success. Support Vector Machine (SVM) also showed strong performance (Accuracy = 76%, AUC = 0.84), capturing complex boundaries but with higher computational cost. Simpler models like Logistic Regression achieved respectable accuracy (>70%) and helped highlight interpretable trends.
 
----
+
 
 ## Future Improvements
 
@@ -196,14 +196,14 @@ XGBoost and Random Forest models performed best overall (Accuracy = 78%, AUC = 0
 - Expand model calibration for real-world recommendation scenarios.
 
 
----
+
 
 ## Disclaimer
 
 This project was developed for academic purposes only. It does not represent commercial forecasting tools, nor does it endorse or predict success in the music industry.
 
 
----
+
 
 ## License
 
