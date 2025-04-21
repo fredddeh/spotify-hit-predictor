@@ -1,4 +1,3 @@
-# Versiyonlarla birlikte R paketlerini yükleme scripti
 required_packages <- list(
   "pROC" = "1.18.5",
   "caret" = "6.0-94",
