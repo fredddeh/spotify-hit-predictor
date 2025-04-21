@@ -57,7 +57,7 @@ spotify-hit-predictor/
 | Logistic Regression | R        | `scripts/logistic_regression.R`       |
 | Random Forest       | R        | `scripts/random_forest.R`             |
 | XGBoost             | Python   | `scripts/Spotify_XGBoost.ipynb`       |
-| SVM                 | Python   | `scripts/dataset/svm_model.ipynb`     |
+| SVM                 | Python   | `scripts/Spotify_SVM.ipynb`           |
 
 ---
 
