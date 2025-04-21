@@ -15,4 +15,4 @@ __pycache__/
 .vscode/
 .DS_Store
 .cache/
-
+.ipynb_checkpoints/
