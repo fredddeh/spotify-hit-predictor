@@ -63,6 +63,18 @@ spotify-hit-predictor/
 
 ## Required Packages
 
+This project uses both **Python** and **R** for analysis and modeling.
+
+---
+
+### Python 
+
+Install all required Python packages using:
+
+```
+pip install -r requirements.txt
+```
+
 ### R
 Packages used in `Spotify_EDA.Rmd` include:
 
