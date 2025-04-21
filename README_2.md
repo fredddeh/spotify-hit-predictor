@@ -142,27 +142,25 @@ spotify-hit-predictor/
 
 ## Required Packages
 
-### R
-Packages used in `Spotify_EDA.Rmd` include:
+This project uses both **Python** and **R** for analysis and modeling.
 
-```r
-xfun, tidyverse, plotly, caret, knitr, kableExtra, Hmisc, reshape2, igraph, visNetwork,
-htmlwidgets, moments, gridExtra, car, shiny, glmnet, patchwork, stringr, qqplotr,
-corrplot, ggcorrplot, scales, e1071
-```
 
-We recommend using renv to manage R dependencies.
+### Python 
 
-Install via:
+Install all required Python packages using:
 
 ```
 pip install -r requirements.txt
 ```
 
-Key libraries include:
 
-```
-pandas, numpy, matplotlib, seaborn, xgboost, scikit-learn
+### R
+
+All required R packages are listed in the `packages.R` file.  
+To install them, run the following command in your R console or RStudio:
+
+```r
+source("packages.R")
 ```
 
 
