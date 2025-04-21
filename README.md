@@ -42,7 +42,7 @@ spotify-hit-predictor/
 
 ## How to Run the Project
 
-### R Markdown (EDA & Feature Analysis)
+### R Scripts (EDA & Feature Analysis)
 - Open `scripts/Spotify_EDA.Rmd` in **RStudio** for EDA part
 - Open `scripts/Spotify_Logistic_Regression.R` in **RStudio** for Logistic Regression Models
 - Open `scripts/Spotify_Random_Forest.R` in **RStudio** for Random Forest Models
