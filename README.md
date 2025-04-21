@@ -168,8 +168,6 @@ source("packages.R")
 
 ## Results
 
-## 📈 Results
-
 Model results and evaluation outputs are included in the final written report and presentation:
 
 `report_presentation/Assessment 2 Report_Spotify Hit Predictor.docx`  
