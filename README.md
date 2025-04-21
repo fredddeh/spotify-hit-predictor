@@ -24,6 +24,9 @@ spotify-hit-predictor/
 │ └── spotify_billboard_merged.csv # Merged and cleaned data for analysis
 ├── scripts/ # Main project scripts and modelling
 │ ├── Spotify_EDA.Rmd
+│ ├── Spotify_Logistic_Regression.R
+│ ├── Spotify_Random_Forest.R
+│ ├── Spotify_SVM.ipynb
 │ ├── Spotify_XGBoost.ipynb
 │ └── dataset/ # Code to enrich, merge, and explore scripts
 │   ├── enrich_spotify_with_billboard.py
@@ -31,6 +34,7 @@ spotify-hit-predictor/
 │   └── merge.py
 ├── .gitignore
 ├── requirements.txt
+├── packages.R
 └── README.md
 ```
 
@@ -39,12 +43,15 @@ spotify-hit-predictor/
 ## How to Run the Project
 
 ### R Markdown (EDA & Feature Analysis)
-- Open `scripts/Spotify_EDA.Rmd` in **RStudio**
+- Open `scripts/Spotify_EDA.Rmd` in **RStudio** for EDA part
+- Open `scripts/Spotify_Logistic_Regression.R` in **RStudio** for Logistic Regression Models
+- Open `scripts/Spotify_Random_Forest.R` in **RStudio** for Random Forest Models
 - Click **“Run Document”** or **Knit** to generate interactive HTML
 
 ### Jupyter Notebooks
+- Open `scripts/Spotify_SVM.ipynb` in **VS Code** or **Jupyter Lab**
 - Open `scripts/Spotify_XGBoost.ipynb` in **VS Code** or **Jupyter Lab**
-- Run all cells to train and evaluate the XGBoost model
+- Run all cells to train and evaluate the models
 
 > All file paths use **relative references** (e.g. `../data/...`) for reproducibility across systems
 
@@ -74,8 +81,16 @@ Install all required Python packages using:
 ```
 pip install -r requirements.txt
 ```
-
+---
 ### R
+
+All required R packages are listed in the `packages.R` file.  
+To install them, run the following command in your R console or RStudio:
+
+```r
+source("packages.R")
+```
+---
 Packages used in `Spotify_EDA.Rmd` include:
 
 ```r
